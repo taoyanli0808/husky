@@ -10,6 +10,9 @@ __pycache__/
 storage/
 embed_models/
 
+# images
+static/images/
+
 # C extensions
 *.so
 
