@@ -15,7 +15,7 @@ from llama_index.readers.file import PDFReader, DocxReader, MarkdownReader
 
 
 # 初始化知识库 (单例模式)
-class KnowledgeBaseManager:
+class Knowledge:
     _instance = None
     _lock = threading.Lock()
     
@@ -81,7 +81,7 @@ class KnowledgeBaseManager:
         
         return {"status": "success", "added_nodes": len(new_docs)}
     
-    def query(self, question: str, top_k: int = 5) -> List[Dict]:
+    def query(self, question: str, top_k: int = 3) -> List[Dict]:
         """执行语义检索"""
         retriever = self.index.as_retriever(similarity_top_k=top_k)
         results = retriever.retrieve(question)

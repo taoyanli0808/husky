@@ -9,7 +9,7 @@ from flask import Flask, request, jsonify, render_template
 from husky.mysql import Mysql
 from husky.require import Require
 from husky.testcase import Testcase
-from husky.knowledge import KnowledgeBaseManager
+from husky.knowledge import Knowledge
 
 
 app = Flask(__name__)
@@ -140,7 +140,7 @@ def handle_upload():
         require.evaluate().save()
 
         # 第二部解析文档，并存储为llama_index本地知识。
-        result = KnowledgeBaseManager().add_files(filename, file.mimetype)
+        result = Knowledge().add_files(filename, file.mimetype)
         return jsonify({
             "status": "success",
             "name": require.record["name"],
@@ -201,7 +201,7 @@ def handle_search():
         return jsonify({"error": "缺少查询参数 q"}), 400
     
     top_k = int(request.args.get('top_k', 5))
-    results = KnowledgeBaseManager().query(question['q'], top_k)
+    results = Knowledge().query(question['q'], top_k)
     logger.info(f"知识库查询结果：{results}")
     return jsonify({"results": results})
 

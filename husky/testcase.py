@@ -4,20 +4,26 @@ import json
 
 from loguru import logger
 from openai import OpenAI
+from textwrap import dedent
 from PyPDF2 import PdfReader
 
 from husky.mysql import Mysql
-
-from husky.config import API_KEY
+from husky.config import API_KEY, KNOWLEDGE_SCORE
+from husky.knowledge import Knowledge
 
 
 class Testcase:
 
     def __init__(self):
         self.gpt = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
+        self.knowledge = Knowledge()
 
-    def load_prompt_template(self):
-        prompt = """  
+    def load_prompt_template(self, require_name):
+        knowledges = self.knowledge.query(require_name)
+        knowledges = [k['text'] for k in knowledges if k['score'] >= KNOWLEDGE_SCORE ]
+        knowledge_str = '\n'.join(knowledges)
+
+        prompt = dedent("""  
             你是一位资深的测试工程师，负责将产品需求转化为手工测试用例。请严格遵循以下规则：
 
             # 角色与目标  
@@ -53,9 +59,9 @@ class Testcase:
                 ]
             }
             2. 场景覆盖要求：
-            正常流程（40%）：完整的主流程验证
-            异常流程（30%）：错误操作/非法输入
-            边界情况（30%）：极限值/特殊条件
+            正常流程（60%）：完整的主流程验证
+            异常流程（20%）：错误操作/非法输入
+            边界情况（20%）：极限值/特殊条件
             3. 步骤编写规范：
             步骤需明确操作主体（如"测试员输入..."）
             包含验证点（如"检查页面显示..."）
@@ -100,16 +106,18 @@ class Testcase:
             2. 每个用例步骤数≤6步
             3. 预期结果必须可观察验证
             4. 测试类型最多选2个分类
+        """) + knowledge_str + dedent("""
             请根据以下需求生成测试用例：
-        """
+        """)
         return prompt
 
     def generate_testcase(self, require):
         try:
+            prompt = self.load_prompt_template(require['require_name'])
             response = self.gpt.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": self.load_prompt_template()},
+                    {"role": "system", "content": prompt},
                     {"role": "user", "content": require['content']},
                 ],
                 # max_tokens='8K',
