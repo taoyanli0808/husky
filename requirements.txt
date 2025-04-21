@@ -1,0 +1,15 @@
+torch
+flask
+openai
+loguru
+pillow
+pymysql
+PyMuPDF
+flask_cors
+torchaudio
+torchvision
+python-dotenv
+sentence-transformers
+llama-index-core
+llama-index-readers-file
+llama-index-embeddings-huggingface
