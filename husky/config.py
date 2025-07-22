@@ -1,6 +1,4 @@
 
-API_KEY="sk-"
-
 KNOWLEDGE_SCORE=0.696
 
 MYSQL={

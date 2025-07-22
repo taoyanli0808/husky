@@ -1,9 +1,9 @@
-CREATE TABLE testcase (
-    `case_id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '测试用例唯一标识符',
+CREATE TABLE testcases (
+    `case_id` VARCHAR(50) NOT NULL PRIMARY KEY COMMENT '测试用例唯一标识符',
+    `task_id` VARCHAR(50) NOT NULL COMMENT '任务ID，每次创建用例生成唯一任务ID',
+    `require_id` VARCHAR(50) NOT NULL COMMENT '需求ID',
     `case_name` VARCHAR(255) NOT NULL COMMENT '测试用例名称',
-    `require_id` BIGINT NOT NULL COMMENT '关联需求唯一标识符',
-    `require_name` VARCHAR(255) NOT NULL COMMENT '关联需求名称',
-    `precondition` JSON COMMENT '前置条件(JSON数组)',
+    `preconditions` JSON COMMENT '前置条件(JSON数组)',
     `test_steps` JSON NOT NULL COMMENT '测试步骤(JSON数组)',
     `expected_result` JSON NOT NULL COMMENT '预期结果(JSON数组)',
     `priority` VARCHAR(10) NOT NULL COMMENT '优先级(P0-P3)',
