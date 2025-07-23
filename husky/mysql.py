@@ -134,32 +134,3 @@ class Mysql:
             print(f"Delete error: {e}")
             self.connection.rollback()
             return 0
-
-if __name__ == "__main__":
-    # 使用示例
-    with DBManager() as db:
-        # 创建记录
-        db.create('users', {
-            'name': 'John',
-            'age': 30,
-            'email': 'john@example.com'
-        })
-
-        # 查询记录
-        users = db.search('users', where={'age': 30})
-        print("查询结果:", users)
-
-        # 更新记录
-        update_count = db.update(
-            table='users',
-            update_data={'age': 31},
-            where={'email': 'john@example.com'}
-        )
-        print(f"更新了 {update_count} 条记录")
-
-        # 删除记录
-        delete_count = db.delete(
-            table='users',
-            where={'email': 'john@example.com'}
-        )
-        print(f"删除了 {delete_count} 条记录")

@@ -86,16 +86,21 @@
     methods: {
       // 处理文件上传成功
       handleUploadSuccess(response, file, fileList) {
-        // 成功时清空文件列表
-        this.$refs.uploadRef.clearFiles()
-        if (response && response.added_nodes) {
-            this.showStatusAlert(
-            `成功添加 ${response.added_nodes} 个文本块`,
+        this.$nextTick(() => {
+          if (this.$refs.uploadRef) {
+            this.$refs.uploadRef.clearFiles();
+          }
+        });
+
+        // 正确处理嵌套的响应结构
+        if (response && response.data && response.data.added_nodes !== undefined) {
+          this.showStatusAlert(
+            `成功添加 ${response.data.added_nodes} 个文本块`,
             'success'
-            );
+          );
         } else {
-            console.error('无效的响应结构:', response);
-            this.showStatusAlert('上传成功但响应格式异常', 'warning');
+          console.error('无效的响应结构:', response);
+          this.showStatusAlert('上传成功但响应格式异常', 'warning');
         }
       },
   
@@ -111,9 +116,21 @@
       },
 
       beforeUpload(file) {
-        // 每次上传前强制清空历史文件
-        this.$refs.uploadRef.clearFiles()
-        return true
+        // 检查文件类型
+        const isAllowedType = ['application/pdf', 'text/markdown'].includes(file.type);
+        if (!isAllowedType) {
+          this.$message.error('只能上传 PDF 或 Markdown 文件');
+          return false;
+        }
+        
+        // 检查文件大小 (10MB)
+        const isLt10M = file.size / 1024 / 1024 < 10;
+        if (!isLt10M) {
+          this.$message.error('文件大小不能超过 10MB');
+          return false;
+        }
+        
+        return true;
       },
   
       // 显示状态提示
