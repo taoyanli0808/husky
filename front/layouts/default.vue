@@ -50,6 +50,7 @@ export default {
 </script>
 
 <style scoped>
+body { margin: 0 !important; }
 .app-container {
   display: flex;
   flex-direction: column;
