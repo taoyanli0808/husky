@@ -1,4 +1,3 @@
-
 import os
 import re
 import json
@@ -13,7 +12,7 @@ import PyPDF2  # 需要安装：pip install PyPDF2
 
 from openai import OpenAI
 from loguru import logger
-from .mysql import Mysql  # 假设你的Mysql类在mysql.py中
+from husky.repositories.mysql_repository import MysqlRepository  # 更新导入路径
 
 class Requirements:
     def __init__(self, file_stream: BytesIO, filename: str):
@@ -115,7 +114,7 @@ class Requirements:
             {
                 "description": "营销系统需要支持折扣券能力，用于618期间拉新和提升订单量，...",
                 "business_domain": "营销",
-                "module": "优惠券'",
+                "module": "优惠券",
                 "tags": ["营销", "优惠券"] // 技术或业务标签如API/安全/移动端
             }
 
@@ -127,7 +126,7 @@ class Requirements:
         )
         return prompt
         
-    def _parse_context_by_big_model(self) -> 'Require':
+    def _parse_context_by_big_model(self) -> 'Requirements':
         prompt = self.load_prompt_template()
         response = self.gpt.chat.completions.create(
             model="deepseek-chat",
@@ -149,7 +148,7 @@ class Requirements:
 
         return self
 
-    def evaluate(self) -> 'Require':
+    def evaluate(self) -> 'Requirements':
         """执行需求解析和质量评估"""
         # 1. 提取原始文本
         self.record["require_name"] = self.filename
@@ -167,7 +166,7 @@ class Requirements:
     def save(self) -> bool:
         """使用ON DUPLICATE KEY UPDATE实现原子化操作"""
         try:
-            with Mysql() as db:
+            with MysqlRepository() as db:
                 data = {
                     "require_id": self.record["require_id"],
                     "require_name": self.record["require_name"],
@@ -206,7 +205,7 @@ class Requirements:
     def load(cls, require_id: str) -> Optional[Dict]:
         """从数据库加载需求"""
         try:
-            with Mysql() as db:
+            with MysqlRepository() as db:
                 results = db.search(
                     table="requirements",
                     where={"require_id": require_id}
@@ -215,3 +214,5 @@ class Requirements:
         except Exception as e:
             logger.error(f"需求加载失败: {e}")
             return None
+
+# 确保文件末尾有换行符

@@ -1,11 +1,10 @@
-
 import os
 import re
 
 import fitz  # PyMuPDF
 import pdfplumber
 
-class Pdf:
+class PdfService:
 
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
@@ -145,7 +144,7 @@ class Pdf:
                 # 图片用相对路径和注释标记位置
                 output.append(
                     f"\n<!-- 图片位置: X={elem['x0']:.1f}px, 宽度={elem['width']:.1f}px -->\n"
-                    f"![]({os.path.relpath(elem['path'], start=os.getcwd())})\n\n"
+                    f"!({os.path.relpath(elem['path'], start=os.getcwd())})\n\n"
                 )
         self.content = '\n'.join(output)
         
