@@ -1,49 +1,53 @@
-
 import os
 import json
 import uuid
 
-from typing import Dict, List
+from datetime import datetime
+from typing import Dict, List, Optional
 
 from loguru import logger
 from openai import OpenAI
 
-from husky.mysql import Mysql
+from husky.repositories.mysql_repository import MysqlRepository
 from husky.utils import get_husky_id
 
-class Task():
+class TaskService():
     
     def __init__(self):
-        self.db = Mysql()
-        self.task_status = {}
         self.gpt = OpenAI(api_key=os.getenv("API_KEY"), base_url="https://api.deepseek.com")
+        self.task_status = {}
 
     def process_point_analysis(self, task_id: str, require_id: str) -> None:
         """协调处理流程"""
-        try:
-            # 初始化任务状态
-            self.init_task(task_id)
-            self.task_status[task_id]['require_id'] = require_id  # 存储 require_id
+        # 初始化任务状态
+        self.update_task_status(task_id, status='processing', progress=10, message="开始需求分块处理...")
             
-            # 第一步：需求分块处理
-            self.update_task_status(task_id, 'processing', 30, "开始需求分块处理...")
-            self.chunk_requirements(task_id, require_id)
+        # 第一步：需求分块处理
+        self.chunk_requirements(task_id, require_id)
+        self.update_task_status(task_id, status='processing', progress=30, message="需求分块完成，开始提取功能点...")
             
-            # 第二步：模块功能点提取
-            self.update_task_status(task_id, 'processing', 90, "提取模块功能点...")
-            self.extract_function_points(task_id)
+        # 第二步：模块功能点提取
+        self.extract_function_points(task_id)
+        self.update_task_status(task_id, status='processing', progress=90, message="功能点提取完成，正在保存结果...")
             
-            # 最终结果处理
-            self.finalize_point_task(task_id, require_id)
-            self.update_task_status(task_id, 'completed', 100, "完成需求分析...")
-            
-        except Exception as e:
-            self.handle_task_error(task_id, e)
+        # 最终结果处理
+        self.finalize_point_task(task_id, require_id)
+        self.update_task_status(
+            task_id,
+            status='completed',
+            progress=100,
+            message="任务完成",
+            result=json.dumps({
+                'points_count': len(self.get_task_points(task_id)),
+                'require_id': require_id
+            })
+        )
 
     def chunk_requirements(self, task_id: str, require_id: str):
         """第一步：需求分块处理"""
         try:
-            requirement = self.db.search('requirements', columns=['original_text'], where={'require_id': require_id})
+            with MysqlRepository() as db:
+                requirement = db.search('requirements', columns=['original_text'], where={'require_id': require_id})
             logger.debug(f"需求拆分模块：{requirement}")
             original_text = requirement[0]['original_text'] if requirement else ""
             prompt = """
@@ -79,7 +83,6 @@ class Task():
                 messages=[
                     {"role": "system", "content": prompt}
                 ],
-                # max_tokens='8K',
                 temperature=1.0,
                 response_format={"type": "json_object"},
                 stream=False
@@ -88,9 +91,10 @@ class Task():
             # 这里将测试用例存入数据库
             chunks = json.loads(response.choices[0].message.content)
             logger.debug(f'需求模块切分结果：{chunks}')
-            self.task_status[task_id]['chunks'] = chunks['chunks']
+            self.task_status[task_id] = {'chunks': chunks['chunks']}
             return self
         except Exception as error:
+            logger.error(f"需求分块处理失败: {str(error)}")
             return 0
 
     def extract_function_points(self, task_id: str):
@@ -133,7 +137,6 @@ class Task():
                     messages=[
                         {"role": "system", "content": prompt}
                     ],
-                    # max_tokens='8K',
                     temperature=1.0,
                     response_format={"type": "json_object"},
                     stream=False
@@ -144,11 +147,12 @@ class Task():
                 chunk.setdefault("points", points['points'])
             return self
         except Exception as error:
+            logger.error(f"功能点提取失败: {str(error)}")
             return 0
     
     def process_testcase_analysis(self, task_id: str, require_id: str, point_ids: list) -> None:
         # 初始化任务状态
-        self.init_task(task_id)
+        self.init_task('testcase_analysis', task_id, require_id)
         self.task_status[task_id]['require_id'] = require_id  # 存储 require_id
             
         # 第一步：获取需求和测试点
@@ -165,16 +169,16 @@ class Task():
         
     def search_requirement_and_points(self, task_id: str, require_id: str, point_ids: list):
         # 查询原始需求内容
-        with Mysql() as db:
+        with MysqlRepository() as db:
             requirements = db.search('requirements', columns=['require_name', 'original_text'], where={'require_id': require_id})
             if requirements:
-                self.task_status[task_id]['requirement'] = requirements[0]['original_text']
+                self.task_status[task_id] = {'requirement': requirements[0]['original_text']}
             logger.debug(f"需求内容是：{self.task_status[task_id]['requirement']}")
         
         # 查询所有测试点
         self.task_status[task_id]['points'] = []
         for point_id in point_ids:
-            with Mysql() as db:
+            with MysqlRepository() as db:
                 point = db.search('points', columns=['function_name', 'description', 'business_domain', 'module', 'chunks', 'preconditions'], where={'point_id': point_id})
                 self.task_status[task_id]['points'].append(point[0])
                 logger.debug(f"功能点内容是：{point[0]}")
@@ -183,34 +187,34 @@ class Task():
         try:
             self.task_status[task_id]['testcases'] = []
             for point in self.task_status[task_id]['points']:
-                prompt = """  
-                    你是一位资深的测试工程师，负责将产品需求转化为手工测试用例。请严格遵循以下规则：
-                    # 角色与目标  
-                    - 角色：功能测试专家，擅长用户场景分析  
-                    - 输入：自然语言描述的产品需求  
-                    - 输出：可直接执行的手工测试用例集  
-                    - 结果：尽可能多的生成测试用例，每次生成不少于3条测试用例
+                prompt = """
+            你是一位资深的测试工程师, 负责将产品需求转化为手工测试用例. 请严格遵循以下规则:
+            # 角色与目标
+            - 角色: 功能测试专家, 擅长用户场景分析
+            - 输入: 自然语言描述的产品需求
+            - 输出: 可直接执行的手工测试用例集
+            - 结果: 尽可能多的生成测试用例, 每次生成不少于3条测试用例
 
-                    # 输入示例  
+                    # 输入示例
                     '''
-                    产品需求：  
-                    用户登录功能  
-                    1. 支持手机号/邮箱+密码登录  
-                    2. 密码输入错误3次后锁定账户30分钟  
-                    3. 登录成功跳转至个人主页  
+                    产品需求：
+                    用户登录功能
+                    1. 支持手机号/邮箱+密码登录
+                    2. 密码输入错误3次后锁定账户30分钟
+                    3. 登录成功跳转至个人主页
                     '''
 
-                    # 生成规则  
-                    1. 场景覆盖要求：
-                        1.1 正常流程（60%）：完整的主流程验证
-                        1.2 异常流程（20%）：错误操作/非法输入
-                        1.3 边界情况（20%）：极限值/特殊条件
-                    2. 步骤编写规范：
-                        2.1 步骤需明确操作主体（如"测试员输入..."）
-                        2.2 包含验证点（如"检查页面显示..."）
-                        2.3 使用祈使句（"点击登录按钮"）
-                    3. 输出示例:必须严格按以下JSON格式输出，不能随意增加或减少字段
-                    ```json  
+            # 生成规则
+            1. 场景覆盖要求:
+                1.1 正常流程(60%): 完整的主流程验证
+                1.2 异常流程(20%): 错误操作/非法输入
+                1.3 边界情况(20%): 极限值/特殊条件
+            2. 步骤编写规范:
+                2.1 步骤需明确操作主体(如"测试员输入...")
+                2.2 包含验证点(如"检查页面显示...")
+                2.3 使用祈使句("点击登录按钮")
+            3. 输出示例:必须严格按以下JSON格式输出, 不能随意增加或减少字段
+            ```json
                     {
                         "testcases": [
                             {
@@ -245,20 +249,19 @@ class Task():
                         ]
                     }
                     
-                    # 擅长技能
-                    1. 等价类划分法‌：将输入域分为有效/无效等价类，通过选取典型值覆盖所有类别。例如密码长度验证时，划分8位有效类、7位无效类等。‌‌
-                    2. ‌边界值分析法‌：针对输入边界及相邻值设计用例，如数值范围10-100时测试9、10、99、100等边界值。‌‌
-                    3. 正交实验法‌：使用正交表覆盖多因素组合，例如同时测试浏览器类型（Chrome/Firefox）与操作系统（Windows/macOS）组合。‌‌
-                    4. 因果图法‌：通过输入条件与输出结果的因果逻辑建立测试矩阵，适合复杂条件组合场景。‌‌
+            # 擅长技能
+            1. 等价类划分法: 将输入域分为有效/无效等价类, 通过选取典型值覆盖所有类别。例如密码长度验证时, 划分8位有效类、7位无效类等。
+            2. 边界值分析法: 针对输入边界及相邻值设计用例，如数值范围10-100时测试9、10、99、100等边界值。
+            3. 正交实验法: 使用正交表覆盖多因素组合，例如同时测试浏览器类型(Chrome/Firefox)与操作系统(Windows/macOS)组合。
+            4. 因果图法: 通过输入条件与输出结果的因果逻辑建立测试矩阵，适合复杂条件组合场景。
                     等等
 
-                    
                     # 特殊约束
                     1. 禁止使用代码术语（如"发送POST请求"）
-                    2. 每个用例步骤数≤6步
+                    2. 每个用例步骤数<=6步
                     3. 预期结果必须可观察验证
                     4. 测试类型最多选2个分类
-                    
+
                     # 需求内容如下：
                 """ + self.task_status[task_id]['requirement'] + """
                     本次要生成的用范围是：
@@ -275,7 +278,6 @@ class Task():
                     messages=[
                         {"role": "system", "content": prompt}
                     ],
-                    # max_tokens='8K',
                     temperature=1.0,
                     response_format={"type": "json_object"},
                     stream=False
@@ -287,24 +289,62 @@ class Task():
                 self.task_status[task_id]['testcases'].extend(testcases['testcases'])
             return self
         except Exception as error:
+            logger.error(f"测试用例生成失败: {str(error)}")
             return 0
 
-    def init_task(self, task_id: str) -> None:
-        """初始化任务状态"""
-        self.task_status[task_id] = {
-            'status': 'pending',
-            'progress': 0,
-            'message': '等待开始',
-            'result': None
-        }
+    def init_task(self, task_type: str, task_id: str, require_id: str = None) -> Dict:
+        """初始化任务记录"""
+        # 初始化内存中的任务状态
+        self.task_status[task_id] = {}
+        
+        with MysqlRepository() as db:
+            db.create('tasks', {
+                'task_id': task_id,
+                'require_id': require_id,
+                'task_type': task_type,
+                'status': 'pending',
+                'progress': 0,
+                'message': '等待开始',
+                'start_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
+        return self.get_task_status(task_id)
 
-    def update_task_status(self, task_id: str, status: str, progress: int, message: str) -> None:
-        """更新任务状态"""
-        self.task_status[task_id].update({
-            'status': status,
-            'progress': progress,
-            'message': message
-        })
+    def update_task_status(self, task_id: str, **kwargs) -> Dict:
+        """通用状态更新方法"""
+        update_data = {'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        
+        # 特殊字段处理
+        if 'status' in kwargs and kwargs['status'] == 'completed':
+            update_data['end_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        update_data.update(kwargs)
+        
+        with MysqlRepository() as db:
+            db.update(
+                table='tasks',
+                update_data=update_data,
+                where={'task_id': task_id}
+            )
+        return self.get_task_status(task_id)
+    
+    def get_task_status(self, task_id: str) -> Optional[Dict]:
+        """获取完整任务状态"""
+        with MysqlRepository() as db:
+            tasks = db.search(
+                table='tasks',
+                where={'task_id': task_id}
+            )
+            if not tasks:
+                return None
+            
+            task = tasks[0]
+            # 处理JSON字段
+            if task.get('result'):
+                try:
+                    task['result'] = json.loads(task['result'])
+                except json.JSONDecodeError:
+                    task['result'] = None
+            return task
 
     def finalize_point_task(self, task_id: str, require_id: str) -> None:
         """完成处理任务"""
@@ -327,7 +367,7 @@ class Task():
                 flatten.append({'point_id': point_id, **raw})
         
         # 2. 批量更新插入
-        with Mysql() as db:
+        with MysqlRepository() as db:
             for point_data in flatten:
                 # 构建ON DUPLICATE KEY UPDATE语句
                 with db.connection.cursor() as cursor:
@@ -372,7 +412,7 @@ class Task():
             testcase.setdefault('task_id', task_id)
             testcase.setdefault('require_id', require_id)
         
-            with Mysql() as db:
+            with MysqlRepository() as db:
                 # 构建ON DUPLICATE KEY UPDATE语句
                 with db.connection.cursor() as cursor:
                     # 转义列名
@@ -405,14 +445,32 @@ class Task():
         logger.info(f"任务 {task_id} 处理完成，共处理 {len(self.task_status[task_id]['testcases'])} 条记录")
 
 
-    def handle_task_error(self, task_id: str, error: Exception) -> None:
-        """处理任务异常"""
-        self.task_status[task_id].update({
-            'status': 'failed',
-            'message': f"处理失败: {str(error)}"
-        })
+    def get_task_points(self, task_id: str) -> List[Dict]:
+        """获取任务生成的所有功能点"""
+        with MysqlRepository() as db:
+            return db.search(
+                table='points',
+                where={'task_id': task_id}
+            )
+
+    def get_task_testcases(self, task_id: str) -> List[Dict]:
+        """获取任务生成的所有测试用例"""
+        with MysqlRepository() as db:
+            testcases = db.search(
+                table='testcases',
+                where={'task_id': task_id}
+            )
+            # 处理JSON字段
+            for tc in testcases:
+                for field in ['preconditions', 'test_steps', 'expected_result', 'test_type']:
+                    if tc.get(field):
+                        try:
+                            tc[field] = json.loads(tc[field])
+                        except json.JSONDecodeError:
+                            tc[field] = []
+            return testcases
     
 
 if __name__ == '__main__':
-    task = Task()
+    task = TaskService()
     task.process_testcase_analysis('TASK_001', "REQ-20250721160532-666", ['POINT_017edce9c287e69ebcee8da14f07b61a', 'POINT_5486422e6490690a9989b1c4612e0123'])

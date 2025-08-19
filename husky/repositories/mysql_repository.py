@@ -1,17 +1,23 @@
-
 import json
 import pymysql
 
 from loguru import logger
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 from husky.config import MYSQL
 
 
-class Mysql:
+class MysqlRepository:
     def __init__(self):
         self.connection = pymysql.connect(**MYSQL, cursorclass=pymysql.cursors.DictCursor)
+    
+    def get_current_time(self):
+        """获取当前时间"""
+        with self.connection.cursor() as cursor:
+            cursor.execute("SELECT NOW() as `current_time`")
+            result = cursor.fetchone()
+            return result['current_time']
     
     def __enter__(self):
         return self

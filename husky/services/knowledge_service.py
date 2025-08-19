@@ -1,4 +1,3 @@
-
 import tempfile
 import threading
 
@@ -15,7 +14,7 @@ from llama_index.readers.file import PDFReader, DocxReader, MarkdownReader
 
 
 # 初始化知识库 (单例模式)
-class Knowledge:
+class KnowledgeService:
     _instance = None
     _lock = threading.Lock()
     

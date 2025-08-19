@@ -39,105 +39,44 @@
     </el-card>
 
     <el-card class="result-card" shadow="never" v-if="testcases.length > 0">
-      <div slot="header">
+      <div slot="header" class="result-header">
         <span>测试用例列表</span>
+        <div class="view-switcher">
+          <el-radio-group v-model="viewMode" size="small">
+            <el-radio label="table">表格视图</el-radio>
+            <el-radio label="mindmap">脑图视图</el-radio>
+          </el-radio-group>
+        </div>
         <span style="float: right; font-size: 12px; color: #909399">
           共 {{ testcases.length }} 条
         </span>
       </div>
-      <el-table
-        :data="testcases"
-        v-loading="loading"
-        border
-        style="width: 100%"
-      >
-        <el-table-column prop="case_id" label="用例ID" width="150"></el-table-column>
-        <el-table-column prop="case_name" label="用例名称">
-          <template slot-scope="scope">
-            <strong>{{ scope.row.case_name }}</strong>
-          </template>
-        </el-table-column>
-        <el-table-column prop="priority" label="优先级" width="100">
-          <template slot-scope="scope">
-            <el-tag
-              :type="
-                scope.row.priority === 'P0'
-                  ? 'danger'
-                  : scope.row.priority === 'P1'
-                  ? 'warning'
-                  : scope.row.priority === 'P2'
-                  ? 'primary'
-                  : 'success'
-              "
-            >
-              {{ scope.row.priority }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="test_type" label="测试类型" width="150">
-          <template slot-scope="scope">
-            <div v-if="Array.isArray(scope.row.test_type)">
-              <el-tag
-                v-for="(item, index) in scope.row.test_type"
-                :key="index"
-                size="small"
-                style="margin-right: 5px; margin-bottom: 5px"
-              >
-                {{ item }}
-              </el-tag>
-            </div>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="preconditions" label="前置条件">
-          <template slot-scope="scope">
-            <div v-if="Array.isArray(scope.row.preconditions)">
-              <el-tag
-                v-for="(item, index) in scope.row.preconditions"
-                :key="index"
-                size="small"
-                style="margin-right: 5px; margin-bottom: 5px"
-              >
-                {{ item }}
-              </el-tag>
-            </div>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="test_steps" label="操作步骤">
-          <template slot-scope="scope">
-            <div v-if="Array.isArray(scope.row.test_steps)">
-              <ol style="margin: 0; padding-left: 20px">
-                <li v-for="(step, index) in scope.row.test_steps" :key="index">
-                  {{ step }}
-                </li>
-              </ol>
-            </div>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="expected_result"
-          label="预期结果"
-        >
-          <template slot-scope="scope">
-            <div v-if="Array.isArray(scope.row.expected_result)">
-              <ul style="margin: 0; padding-left: 20px">
-                <li v-for="(result, index) in scope.row.expected_result" :key="index">
-                  {{ result }}
-                </li>
-              </ul>
-            </div>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-      </el-table>
+
+      <!-- 表格视图 -->
+      <test-case-table 
+        v-if="viewMode === 'table'"
+        :testcases="testcases"
+        :loading="loading"
+      />
+
+      <!-- 脑图视图 -->
+      <test-case-mindmap 
+        v-else
+        :testcases="testcases"
+      />
     </el-card>
   </div>
 </template>
 
 <script>
+import TestCaseTable from '@/components/TestCaseTable.vue'
+import TestCaseMindmap from '@/components/TestCaseMindmap.vue'
+
 export default {
+  components: {
+    TestCaseTable,
+    TestCaseMindmap
+  },
   data() {
     return {
       task_id: "",
@@ -152,7 +91,8 @@ export default {
         { desc: "等待开始", completed: false },
         { desc: "等待开始", completed: false },
         { desc: "等待开始", completed: false }
-      ]
+      ],
+      viewMode: 'table' // 'table' 或 'mindmap'
     };
   },
   computed: {
@@ -222,23 +162,26 @@ export default {
 
     async checkTaskStatus(task_id) {
       try {
-        const response = await this.$axios.post("/api/v1/testcase/status", null, {
+        const response = await this.$axios.get("/api/v1/task/search", {
           params: { task_id },
         });
 
-        if (response.data.code === 0) {
-          this.task_status = response.data.data;
-          this.task_message = response.data.data.message || "";
-          this.updateProgressSteps(response.data.data);
+        if (response.data.code === 0 && response.data.data.list && response.data.data.list.length > 0) {
+          const taskData = response.data.data.list[0];
+          this.task_status = taskData;
+          this.task_message = taskData.message || "";
+          this.updateProgressSteps(taskData);
           
-          if (response.data.data.status === "completed") {
+          if (taskData.status === "completed") {
             this.stopPolling();
             // 自动加载测试用例
             this.fetchTestCases();
           }
           return true;
+        } else {
+          console.error("未找到任务数据");
+          return false;
         }
-        return false;
       } catch (error) {
         console.error("查询任务状态失败:", error);
         return false;
@@ -330,5 +273,15 @@ export default {
 
 .result-card {
   margin-bottom: 20px;
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.view-switcher {
+  margin-left: 20px;
 }
 </style>
