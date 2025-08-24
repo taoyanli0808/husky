@@ -29,7 +29,8 @@ export default {
     */
     css: [
       'element-ui/lib/theme-chalk/index.css',
-      '@/assets/global.css'
+      '@/assets/global.css',
+      '@/assets/element-overrides.css'
     ],
     /*
     ** Plugins to load before mounting the App

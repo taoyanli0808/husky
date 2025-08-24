@@ -1,0 +1,8 @@
+/* 全局覆盖Element UI对话框样式 */
+.el-dialog .el-dialog__body {
+  width: 400px !important;
+  box-sizing: border-box !important;
+  padding: 10px 20px !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}

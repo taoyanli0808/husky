@@ -27,9 +27,16 @@ class KnowledgeService:
     
     def _init_knowledge_base(self):
         # 配置本地嵌入模型
+        # 配置本地嵌入模型，使用绝对路径作为缓存目录
+        cache_dir = Path(__file__).parent.parent.parent / "embed_models"
+        cache_dir.mkdir(exist_ok=True)
+        logger.info(f"使用模型缓存目录: {cache_dir}")
+        
         Settings.embed_model = HuggingFaceEmbedding(
             model_name="BAAI/bge-small-en-v1.5",
-            cache_folder="./embed_models"
+            cache_folder=str(cache_dir),
+            # 添加离线模式支持
+            model_kwargs={"offline": True}
         )
         
         # 初始化存储

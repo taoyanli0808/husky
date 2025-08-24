@@ -1,15 +1,32 @@
 
 import json
+import os
+import dotenv
 from loguru import logger
 from flask_cors import CORS
 from flask import Flask, request, jsonify
+
+# 配置日志
+logger.add(
+    "logs/app.log",
+    rotation="500 MB",
+    retention="10 days",
+    compression="zip",
+    level="DEBUG"
+)
+
+# 加载环境变量
+dotenv.load_dotenv()
+logger.info("环境变量加载完成")
+
+from husky.utils import create_database_if_not_exists
 
 # 导入API蓝图
 from husky.api.v1 import v1_bp
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 限制上传文件100MB
+app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 限制上传文件20MB
 
 # 注册API蓝图
 app.register_blueprint(v1_bp)
@@ -52,4 +69,14 @@ def internal_server_error(error):
     }), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    try:
+        # 启动前创建数据库（如果不存在）
+        create_database_if_not_exists()
+        logger.info("准备启动应用服务器...")
+        app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    except Exception as e:
+        logger.error(f"应用启动失败: {str(e)}", exc_info=True)
+        print(f"启动错误: {str(e)}")
+        # 输出完整异常堆栈
+        import traceback
+        traceback.print_exc()

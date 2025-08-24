@@ -4,11 +4,11 @@
     <div class="top-section">
       <div class="container">
         <div class="top-content">
-          <div class="left-text">需求列表</div>
-          <div class="right-button">
-            <el-button type="primary" size="mini" @click="openUploadDialog">上传需求</el-button>
-          </div>
-        </div>
+  <div class="left-text">需求列表</div>
+  <div class="right-button">
+    <upload-requirement @uploadSuccess="searchRequires" />
+  </div>
+</div>
       </div>
     </div>
     <div v-if="loading" class="loading" v-loading="loading"></div>
@@ -80,9 +80,12 @@
   
 <script>
 import request from '@/utils/request'
-import axios from 'axios'
+import UploadRequirement from '@/components/UploadRequirement.vue'
 
 export default {
+  components: {
+    UploadRequirement
+  },
   filters: {
     formatDate(value) {
       if (!value) return ''
@@ -99,80 +102,13 @@ export default {
   data() {
     return {
       requires: [],
-      loading: false,
-      uploadDialogVisible: false,
-      uploadUrl: 'http://127.0.0.1:5000/api/v1/file/upload',
-      uploadStatus: {
-        show: false,
-        type: 'success',
-        message: ''
-      }
+      loading: false
     }
   },
   mounted() {
     this.searchRequires()
   },
   methods: {
-    openUploadDialog() {
-      this.uploadDialogVisible = true;
-    },
-    
-    handleUploadSuccess(response, file, fileList) {
-      this.$nextTick(() => {
-        if (this.$refs.uploadRef) {
-          this.$refs.uploadRef.clearFiles();
-        }
-      });
-
-      if (response && response.data && response.data.added_nodes !== undefined) {
-        this.showStatusAlert(
-          `成功添加 ${response.data.added_nodes} 个文本块`,
-          'success'
-        );
-        // 上传成功后刷新需求列表
-        this.searchRequires();
-      } else {
-        console.error('无效的响应结构:', response);
-        this.showStatusAlert('上传成功但响应格式异常', 'warning');
-      }
-    },
-    
-    handleUploadError(err) {
-      console.error('上传失败:', err);
-      this.showStatusAlert('文件上传失败，请重试', 'error');
-    },
-    
-    handleExceed() {
-      this.$message.warning('每次只能上传一个文件，请先移除当前文件');
-    },
-    
-    beforeUpload(file) {
-      const isAllowedType = ['application/pdf', 'text/markdown'].includes(file.type);
-      if (!isAllowedType) {
-        this.$message.error('只能上传 PDF 或 Markdown 文件');
-        return false;
-      }
-      
-      const isLt10M = file.size / 1024 / 1024 < 10;
-      if (!isLt10M) {
-        this.$message.error('文件大小不能超过 10MB');
-        return false;
-      }
-      
-      return true;
-    },
-    
-    showStatusAlert(message, type = 'success') {
-      this.uploadStatus = {
-        show: true,
-        type,
-        message
-      };
-      setTimeout(() => {
-        this.uploadStatus.show = false;
-      }, 3000);
-    },
-    
     
     getScoreType(score) {
       if (score >= 4) return 'success'
@@ -464,37 +400,7 @@ export default {
 /* 上传弹框样式 */
 .status-alert {
   margin-top: 15px;
-}
-
-.el-upload__tip {
-  margin-top: 8px;
-  color: #999;
-  font-size: 12px;
-}
-
-/* 其他现有样式保持不变 */
-/* 顶部区域样式 */
-.top-section {
-  background-color: #fff;
-  border-bottom: 1px solid #e8e8e8;
-  padding: 15px 0;
-}
-
-.top-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.left-text {
-  font-size: 18px;
-  font-weight: bold;
-  color: #304156;
-}
-
-/* 上传弹框样式 */
-.status-alert {
-  margin-top: 15px;
+  z-index: 1000;
 }
 
 .el-upload__tip {
@@ -504,41 +410,6 @@ export default {
 }
 </style>
 
-<!-- 上传需求弹框 -->
-<el-dialog
-  title="上传需求文档"
-  :visible.sync="uploadDialogVisible"
-  width="50%"
-  top="15vh"
->
-  <el-upload
-    ref="uploadRef"
-    class="upload-demo"
-    name="file"
-    :limit="1"
-    :action="uploadUrl"
-    :multiple="false"
-    :on-success="handleUploadSuccess"
-    :on-error="handleUploadError"
-    :on-exceed="handleExceed"
-    :before-upload="beforeUpload"
-    :auto-upload="true"
-    :show-file-list="false"
-  >
-    <el-button size="medium" type="primary">点击上传</el-button>
-    <div slot="tip" class="el-upload__tip">支持上传PDF/Markdown文件，单文件最大10MB</div>
-  </el-upload>
-  <el-alert
-    v-if="uploadStatus.show"
-    :title="uploadStatus.message"
-    :type="uploadStatus.type"
-    show-icon
-    class="status-alert"
-  />
-
-  <span slot="footer" class="dialog-footer">
-    <el-button @click="uploadDialogVisible = false">取 消</el-button>
-  </span>
 <!-- 上传需求弹框 -->
 <el-dialog
   title="上传需求文档"
